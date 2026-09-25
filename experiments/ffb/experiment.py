@@ -58,7 +58,29 @@ class Ffb(
         else:
             cluster = ""
 
+        # Fugaku's build is the one with no machine suffix. The package
+        # declares 67.01-cpu - whose url is ffb-frt_cpu.fugaku.tar.gz, on
+        # Fugaku's own filesystem - alongside 67.01-cpu-genoa and
+        # 67.01-gpu-gh200. Suffixing it the way every other riken machine
+        # is suffixed asks for a version nobody declared.
+        if cluster == "-fugaku":
+            cluster = ""
+
         suffix = "-gpu" if self.system_spec.satisfies("compiler=cuda") else "-cpu"
-        spec_str = f"ffb@{base_version}{suffix}{cluster}"
+        # `@=` and not `@`: these version names nest, and a bare `@` is a
+        # range. `ffb@67.01-cpu` therefore also matches `67.01-cpu-genoa`,
+        # and spack prefers that one - so a Fugaku run went looking for
+        # genoa's archive on a filesystem Fugaku does not have:
+        #
+        #     Error: FetchError: All fetchers failed for
+        #       spack-stage-ffb-67.01-cpu-genoa-...
+        #     file:///.../ffb-frt_cpu.genoa.ftz.tar.gz:
+        #       No such file or directory
+        #
+        # The same ambiguity is what turns a version that does not exist
+        # into spack's otherwise baffling "Cannot satisfy
+        # 'ffb@67.01-cpu-fugaku' 1(67.01-gpu-gh200)". `@=` pins the exact
+        # version, which is what naming a machine's archive meant all along.
+        spec_str = f"ffb@={base_version}{suffix}{cluster}"
         self.add_package_spec(self.name, [spec_str])
 

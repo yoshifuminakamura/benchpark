@@ -672,7 +672,29 @@ class RikenFugaku(System):
             "queue": "small",
             "extra_cmd_opts": "-std-proc fjmpioutdir/bmexe\n",
             "extra_batch_opts": '-x PJM_LLIO_GFSCACHE="/vol0002:/vol0003:/vol0004:/vol0005:/vol0006"\n',
-            "post_exec_cmds": "for F in $(ls -1v fjmpioutdir/bmexe.*); do cat $F >> {log_file}; done\n",
+            # A run's stdout lands in one of two places here, and which
+            # one depends on whether ramble built the launch line.
+            #
+            # `extra_cmd_opts` above adds `-std-proc fjmpioutdir/bmexe`, and
+            # ramble appends that only to executables declared use_mpi=True.
+            # qws is one, so its output arrives in fjmpioutdir/. salmon-tddft
+            # writes its own `{mpi_command} ... < input` line with
+            # use_mpi=False, never sees the option, and Fujitsu mpiexec falls
+            # back to its default, output.<jobid>/<node>/<rank>/stdout.<n>.
+            #
+            # With only the first loop, salmon's log held the single line the
+            # shell echoed. The application's success criterion looks for
+            # "total calculation time", which SALMON does print - into those
+            # per-rank files - so a run that finished with every exit code 0
+            # and a FOM of 181.16 s was reported FAILED, and convert.sh
+            # emitted nothing for it.
+            #
+            # 2>/dev/null on both: whichever an experiment did not use is
+            # simply not there.
+            "post_exec_cmds": (
+                "for F in $(ls -1v fjmpioutdir/bmexe.* 2>/dev/null); do cat $F >> {log_file}; done\n"
+                "for F in $(ls -1v output.*/*/*/stdout.* 2>/dev/null); do cat $F >> {log_file}; done\n"
+            ),
         }
 
     def compute_software_section(self):

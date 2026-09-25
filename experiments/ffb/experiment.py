@@ -30,19 +30,34 @@ class Ffb(
     def compute_applications_section(self):
         has_cuda = self.system_spec.satisfies("compiler=cuda")
 
+        # `-N 4` below is Slurm's "four nodes". On Fugaku, -N names the job,
+        # and pjsub refuses the script before it reaches a node:
+        #
+        #     ERR line= 7 .../execute_experiment
+        #     ==> Error: Command exited with status 1: pjsub ...
+        #
+        # Setting extra_batch_opts here also replaces whatever the system
+        # put in it, and on riken-fugaku that is the
+        # `-x PJM_LLIO_GFSCACHE=...` every job on that machine wants - so
+        # the option was doing damage even before pjsub rejected it. The
+        # node count reaches the batch script from n_nodes regardless.
+        set_batch_opts = self.system_spec.name != "riken-fugaku"
+
         if has_cuda: # GPU
             self.add_experiment_variable("n_nodes", 4, True)
             self.add_experiment_variable("processes_per_node", 1)
             self.add_experiment_variable("n_ranks", "{processes_per_node} * {n_nodes}")
             self.add_experiment_variable("size", 31255875, True)
-            self.add_experiment_variable("extra_batch_opts", "-N 4", named=False)
+            if set_batch_opts:
+                self.add_experiment_variable("extra_batch_opts", "-N 4", named=False)
         else: # CPU
             self.add_experiment_variable("n_nodes", ["4"], True)
             self.add_experiment_variable("processes_per_node", ["4"])
             self.add_experiment_variable("n_ranks", "{processes_per_node} * {n_nodes}")
             self.add_experiment_variable("omp_num_threads", ["12"])
             self.add_experiment_variable("size", 8493380, True)
-            self.add_experiment_variable("extra_batch_opts", "-N 4", named=False)
+            if set_batch_opts:
+                self.add_experiment_variable("extra_batch_opts", "-N 4", named=False)
 
         self.set_required_variables(
             n_resources="{n_ranks}",

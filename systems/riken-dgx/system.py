@@ -467,8 +467,23 @@ class RikenDgx(System):
                 [
                     compiler_def(
                         f"nvhpc@{self.nvhpc_version}",
-                        f"/opt/nvidia/hpc_sdk/Linux_aarch64/{self.nvhpc_version}/compilers",
-                        {"c": "nvc", "cxx": "nvc++", "fortran": "nvfortran"},
+                        # The SDK root, not .../compilers: spack's nvhpc
+                        # package appends Linux_<arch>/<version>/compilers
+                        # itself when it looks for libblas and liblapack,
+                        # so a deeper prefix finds nothing and every
+                        # package using the lapack virtual links with an
+                        # empty LAPACK_LIBS. The drivers are given as
+                        # absolute paths because compiler_def would
+                        # otherwise join them to this prefix.
+                        "/opt/nvidia/hpc_sdk",
+                        {
+                            lang: f"/opt/nvidia/hpc_sdk/Linux_aarch64/{self.nvhpc_version}/compilers/bin/{exe}"
+                            for lang, exe in (
+                                ("c", "nvc"),
+                                ("cxx", "nvc++"),
+                                ("fortran", "nvfortran"),
+                            )
+                        },
                         extra_rpaths=[
                             f"/opt/nvidia/hpc_sdk/Linux_aarch64/{self.nvhpc_version}/math_libs/lib64",
                         ],

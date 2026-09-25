@@ -44,6 +44,11 @@ class SalmonTddft(CMakePackage):
     variant("rocm", default=False, description="Enable rocm")
 
     depends_on("cmake@3.14:", type="build")
+    # cmake_args always sets USE_MPI and the build calls an MPI wrapper, so
+    # the dependency is real - it was simply never declared. Without it
+    # spack neither builds nor guarantees an MPI, and CMake picks up
+    # whatever `mpif90` PATH happens to offer.
+    depends_on("mpi")
     depends_on("scalapack", type="link", when="+scalapack")
     depends_on("eigenexa", type="link", when="+eigenexa")
     depends_on("libxc", type="link", when="+libxc")
@@ -111,8 +116,8 @@ class SalmonTddft(CMakePackage):
 
         elif self.compiler.name == 'nvhpc':
             args += [
-                self.define("CMAKE_Fortran_COMPILER", "mpif90"),
-                self.define("CMAKE_C_COMPILER", "mpicc"),
+                self.define("CMAKE_Fortran_COMPILER", spec["mpi"].mpifc),
+                self.define("CMAKE_C_COMPILER", spec["mpi"].mpicc),
                 self.define("OPENMP_FLAGS", "-Mnoopenmp"),
                 self.define("USE_MPI_DEFAULT", True),
                 self.define("USE_OPENACC", True),
@@ -152,8 +157,8 @@ class SalmonTddft(CMakePackage):
 
         elif self.compiler.name == 'gcc':
             args += [
-                self.define("CMAKE_Fortran_COMPILER", "mpif90"),
-                self.define("CMAKE_C_COMPILER", "mpicc"),
+                self.define("CMAKE_Fortran_COMPILER", spec["mpi"].mpifc),
+                self.define("CMAKE_C_COMPILER", spec["mpi"].mpicc),
                 self.define("CMAKE_Fortran_FLAGS", "-O3 -ffree-line-length-none -fallow-argument-mismatch"),
                 self.define("CMAKE_C_FLAGS", "-O3"),
             ]       

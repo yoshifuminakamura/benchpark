@@ -63,4 +63,8 @@ class Qws(ExecutableApplication):
 
     figure_of_merit('Figure of Merit (FOM)', log_file='{experiment_run_dir}/{experiment_name}.out', fom_regex=r'etime for so.ler =\s+(?P<fom>[-+]?([0-9]*[.])?[0-9]+([eED][-+]?[0-9]+)?)', group_name='fom', units='')
 
-    success_criteria('pass', mode='string', match=r'print timing', file='{experiment_run_dir}/{experiment_name}.out')
+    # "print timing" is only emitted when the Makefile defines _CHECK_TIMING,
+    # which its Fujitsu branch does not - so every %fj run was marked FAILED
+    # while producing a perfectly good FOM. Anchor on the line the FOM is
+    # read from, which every build prints.
+    success_criteria('pass', mode='string', match=r'etime for so.ler', file='{experiment_run_dir}/{experiment_name}.out')

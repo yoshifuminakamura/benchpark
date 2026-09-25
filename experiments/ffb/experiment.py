@@ -52,9 +52,23 @@ class Ffb(
 
     def compute_package_section(self):
         base_version = self.spec.variants['version'][0]
-        ret = self.system_spec.variants['cluster']
-        if ret:
-            cluster = f"-{ret[0]}"
+        # Which machine are we on?
+        #
+        # riken-cloud told its machines apart with a `cluster` variant; since
+        # FN_apps 41962f88 each is its own system (riken-dgx, riken-gh200,
+        # riken-genoa, riken-fx700). Reading variants['cluster'] on one of
+        # those raises before anything else happens:
+        #
+        #     benchpark experiment init ... -> KeyError: 'cluster'
+        #
+        # Both spellings are accepted, and a system with neither - any
+        # non-RIKEN one - keeps the empty suffix it had before.
+        name = self.system_spec.name
+        if 'cluster' in self.system_spec.variants:
+            ret = self.system_spec.variants['cluster']
+            cluster = f"-{ret[0]}" if ret else ""
+        elif name.startswith('riken-') and name != 'riken-cloud':
+            cluster = f"-{name[len('riken-'):]}"
         else:
             cluster = ""
 

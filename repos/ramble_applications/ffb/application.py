@@ -17,17 +17,31 @@ class Ffb(ExecutableApplication):
 
     tags('fluid-dynamics')
 
-    if '/lvs' in os.environ["RAMBLE_ROOT"]:
-        if 'qc-gh200' in os.environ["SLURM_JOB_PARTITION"]:
-            cmd = "module purge && module load system/qc-gh200 nvhpc/24.3 && mpiexec -np {n_ranks} les3x.mpi"
-            chksum = '2db68022eb463a328ca69dc949f6abf53126d2f177281d6b3533d7c85c6da5f3'
-            url = 'file:///lvs0/rccs-sdt/kazuto.ando/apps/ffb/benchmark-input-7.8M.tar.gz'
-            executables = ["cpdata", "execute"]
-        elif 'genoa' in os.environ["SLURM_JOB_PARTITION"]:
-            cmd = "ulimit -s unlimited && module purge && module load system/genoa mpi/openmpi-x86_64 && mpiexec -np {n_ranks} les3x.mpi"
-            chksum = 'ac8021b07012f78452e7a964712a849ed8e50364352a3f65677c4eb499e1c501'
-            url = 'file:///lvs0/rccs-sdt/kazuto.ando/apps/ffb/benchmark-input-2.0M.tar.gz'
-            executables = ["cpdata", "execute", "replace_cpu"]
+    # Which machine is this? The partition, not RAMBLE_ROOT.
+    #
+    # RAMBLE_ROOT is wherever the workspace happens to live, so testing it
+    # for '/lvs' sent every rccs-cloud run down the Fugaku branch, where it
+    # tried to fetch an input that does not exist on those machines and
+    # stopped with "All fetchers failed". The cloud inputs are reachable
+    # whatever path the workspace has.
+    #
+    # SLURM_JOB_PARTITION is set in the job that fetches the input and
+    # generates the run script, and absent on a login node, where this
+    # module is also imported (`benchpark setup`) - hence .get() and the
+    # Fugaku default, rather than the KeyError the old code would raise.
+    partition = os.environ.get("SLURM_JOB_PARTITION", "")
+
+    if 'qc-gh200' in partition:
+        cmd = "module purge && module load system/qc-gh200 nvhpc/24.3 && mpiexec -np {n_ranks} les3x.mpi"
+        chksum = '2db68022eb463a328ca69dc949f6abf53126d2f177281d6b3533d7c85c6da5f3'
+        url = 'file:///lvs0/rccs-sdt/kazuto.ando/apps/ffb/benchmark-input-7.8M.tar.gz'
+        executables = ["cpdata", "execute"]
+        use_mpi = False
+    elif 'genoa' in partition:
+        cmd = "ulimit -s unlimited && module purge && module load system/genoa mpi/openmpi-x86_64 && mpiexec -np {n_ranks} les3x.mpi"
+        chksum = 'ac8021b07012f78452e7a964712a849ed8e50364352a3f65677c4eb499e1c501'
+        url = 'file:///lvs0/rccs-sdt/kazuto.ando/apps/ffb/benchmark-input-2.0M.tar.gz'
+        executables = ["cpdata", "execute", "replace_cpu"]
         use_mpi = False
     else:
         cmd = "les3x.mpi"

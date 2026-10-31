@@ -30,6 +30,7 @@ def qws(monkeypatch):
     kit.FomType = types.SimpleNamespace(TIME="time")
     kit.logger = types.SimpleNamespace(warn=lambda message: None)
     for name in (
+        "tags",
         "executable",
         "workload",
         "workload_variable",

@@ -8,7 +8,7 @@ class Mvmc(ExecutableApplication):
     """mVMC FermionHubbard benchmark."""
 
     name = "mvmc"
-    tags = ["materials", "quantum", "monte-carlo", "mpi", "fugaku"]
+    tags("materials", "quantum", "monte-carlo", "mpi", "fugaku")
 
     executable(
         "make-input",

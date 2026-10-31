@@ -1,0 +1,66 @@
+# Copyright 2023 Lawrence Livermore National Security, LLC and other
+# Benchpark Project Developers. See the top-level COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: Apache-2.0
+import inspect
+
+import llnl.util.filesystem as fs
+from spack.package import *
+from spack_repo.builtin.build_systems.makefile import MakefilePackage
+
+
+class Smb(MakefilePackage):
+    tags = []
+
+    url = "https://github.com/sandialabs/SMB/archive/refs/tags/1.1.tar.gz"
+    git = "https://github.com/sandialabs/SMB"
+
+    maintainers("knox10")
+
+    version("master", branch="master")
+    version("1.1", tag="1.1")
+
+    variant("mpi", default=False, description="Build with MPI support")
+    variant("rma", default=False, description="Build RMA-MT variant")    
+
+    # The RMA-MT test names its sender thread function `sendmsg`, which
+    # shadows the C library's sendmsg(2) for every library in the process:
+    # UCX's rdma-core/libnl netlink calls land in it and wait on the
+    # benchmark's condition variable before MPI_Init_thread returns. Renamed.
+    patch("rma_mt_mpi-rename-sendmsg.patch", when="+rma")
+
+    depends_on("c", type="build")
+
+    depends_on("mpi", when="+mpi")
+    depends_on("mpi", when="+rma")
+
+    build_directory = ["src/mpi_overhead"]
+    
+    def edit(self, spec, prefix):
+        if "+rma" in spec:
+            makefile = FileFilter("src/rma_mt_mpi/Makefile")
+            makefile.filter('CC=cc', "CC = {0}".format(spec["mpi"].mpicc))
+    #TODO: add shm variant
+    def build(self, spec, prefix):
+        if "+rma" in spec: 
+            self.build_directory.append("src/rma_mt_mpi")
+        else:
+            self.build_directory.append("src/msgrate")
+
+        for path in self.build_directory:
+            with fs.working_dir(path):
+                make()
+    def install(self, spec, prefix):
+        mkdir(prefix.bin)
+        mkdir(prefix.doc)
+        install("src/mpi_overhead/mpi_overhead", prefix.bin)
+        install("src/mpi_overhead/README", join_path(prefix.doc, "README.mpi_overhead"))
+        if "+rma" in spec:
+            # The RMA-MT build also produces a binary called msgrate; keep
+            # it under its own name (rma_mt_mpi) next to the plain one.
+            install("src/rma_mt_mpi/msgrate", prefix.bin)
+            install("src/rma_mt_mpi/msgrate", join_path(prefix.bin, "rma_mt_mpi"))
+            install("src/rma_mt_mpi/README", join_path(prefix.doc, "README.rma_mt_mpi"))
+        else:
+            install("src/msgrate/msgrate", prefix.bin)
+            install("src/msgrate/README", join_path(prefix.doc, "README.msgrate"))

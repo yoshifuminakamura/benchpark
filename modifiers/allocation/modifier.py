@@ -28,6 +28,9 @@ class AllocOpt(Enum):
     SYS_GPUS_PER_NODE = 100
     SYS_CORES_PER_NODE = 101
     SYS_MEM_PER_NODE_GB = 102
+    # The scheduler decides a job's node count from its GPU request alone
+    # and ignores -N (riken-rikyu); see slurm_instructions.
+    SYS_NODES_BY_GPUS = 103
 
     # Scheduler identification and other high-level instructions
     SCHEDULER = 200
@@ -340,6 +343,10 @@ class Allocation(BasicModifier):
 
         launch_cmd = "srun" if self._usage_mode == "standard" else self._usage_mode
 
+        if v.n_threads_per_proc and int(v.n_threads_per_proc) > 1:
+            srun_opts.append(f"-c {v.n_threads_per_proc}")
+            sbatch_opts.append(f"-c {v.n_threads_per_proc}")
+
         if v.n_ranks:
             if self._usage_mode == "torchrun-hpc":
                 srun_opts.append(f"-n {v.n_ranks_per_node}")
@@ -347,12 +354,27 @@ class Allocation(BasicModifier):
                 srun_opts.append(f"-n {v.n_ranks}")
 
             sbatch_opts.append(f"-n {v.n_ranks}")
+        # Where the site sizes a job by its GPU request and not by -N
+        # (sys_nodes_by_gpus), a multi-node job asks for every GPU of every
+        # node it spans: with fewer, Slurm packs the ranks onto fewer nodes
+        # than -N says. The step inside keeps the experiment's own count.
+        # Single-node jobs are left as they are.
+        n_gpus_job = v.n_gpus
+        if (
+            v.sys_nodes_by_gpus
+            and v.n_nodes
+            and int(v.n_nodes) > 1
+            and v.sys_gpus_per_node
+        ):
+            n_gpus_job = int(v.n_nodes) * int(v.sys_gpus_per_node)
+
         if v.n_gpus:
             if self._usage_mode == "torchrun-hpc":
                 srun_opts.append("--gpus-per-proc=1")
             else:
                 srun_opts.append(f"--gpus {v.n_gpus}")
-            sbatch_opts.append(f"--gpus {v.n_gpus}")
+        if n_gpus_job:
+            sbatch_opts.append(f"--gpus {n_gpus_job}")
         if v.n_nodes:
             srun_opts.append(f"-N {v.n_nodes}")
             sbatch_opts.append(f"-N {v.n_nodes}")

@@ -3,6 +3,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
+import sys
 from packaging.version import Version
 
 from benchpark.cudasystem import CudaSystem
@@ -39,40 +40,64 @@ class RikenGh200(System):
         description="Which compiler to use",
     )
     variant(
+        "gcc",
+        default="13.3.0",
+        values=("13.3.0", "14.3.0", "15.2.0"),
+        description="GCC version",
+    )
+    variant(
         "cuda",
-        default="12.9",
-        values=("12.3", "12.4", "12.5", "12.6", "12.8", "12.9", "13.0", "13.1", "13.2"),
+        default="13.4",
+        values=("13.0", "13.2", "13.3", "13.4", "12.9", "12.6", "12.3"),
         description="CUDA version",
     )
     variant(
+        "cuda12",
+        default=False,
+        values=(True, False),
+        description="CUDA 12 series, ON/OFF",
+    )
+    variant(
         "nvhpc",
-        default="25.7",
-        values=("26.3", "25.9", "25.7", "24.9", "24.3"),
+        default="26.9",
+        values=("26.9", "26.5", "26.3", "25.9", "25.7", "25.1", "24.9", "24.3"),
         description="NVHPC version",
     )
     variant(
-        "gtl",
-        default=False,
-        values=(True, False),
-        description="Use GTL-enabled MPI",
+        "bank",
+        default="none",
+        description="Submit a job to a specific named bank",
     )
 
     def __init__(self, spec):
         super().__init__(spec)
         self.programming_models = [CudaSystem(), OpenMPCPUOnlySystem()]
         self.cuda_version = Version(self.spec.variants["cuda"][0])
-        self.gtl_flag = self.spec.variants["gtl"][0]
+        self.gcc_version = Version(self.spec.variants["gcc"][0])
+        self.cuda_flag = self.spec.variants["cuda12"][0]
         self.nvhpc_version = Version(self.spec.variants["nvhpc"][0])
-        if str(self.nvhpc_version) == "26.3":
-            self.cuda_version = "13.1"
-        if str(self.nvhpc_version) == "25.9":
-            self.cuda_version = "13.0"
-        if str(self.nvhpc_version) == "25.7":
-            self.cuda_version = "12.9"
-        if str(self.nvhpc_version) == "24.9":
-            self.cuda_version = "12.6"
-        if str(self.nvhpc_version) == "24.3":
-            self.cuda_version = "12.3"
+        pnt = sys.argv[1]
+        nvhpc_cuda_version = {
+            "26.9": "13.3",
+            "26.5": "13.2",
+            "26.3": "13.1",
+            "25.9": "13.0",
+            "25.7": "12.9",
+            "25.1": "12.6",
+            "24.9": "12.6",
+            "24.3": "12.3",
+        }
+        if self.spec.satisfies("compiler=nvhpc"):
+            self.cuda_version = nvhpc_cuda_version.get(
+                str(self.nvhpc_version), self.cuda_version
+            )
+        else:
+            if str(self.cuda_version).split(".")[0] == "12":
+                if str(self.cuda_flag) == "False" and str(pnt) == "system":
+                    print("\n CUDA 12 series has been deleted by the administrator.")
+                    print(" Changing to cuda@13.0 and continuing the process.\n")
+                if str(self.cuda_flag) == "False":
+                    self.cuda_version = "13.0"
         self.scheduler = "slurm"
 
         attrs = self.id_to_resources.get("gh200")
@@ -84,18 +109,21 @@ class RikenGh200(System):
             "packages": {
                 "all": {
                     "providers": {
-                        "mpi": ["fujitsu-mpi", "openmpi", "mpich"],
-                        "blas": ["fujitsu-ssl2", "openblas"],
-                        "lapack": ["fujitsu-ssl2", "openblas"],
-                        "scalapack": ["fujitsu-ssl2", "netlib-scalapack"],
-                        "fftw-api": ["fujitsu-fftw", "fftw", "rist-fftw"],
+                        "mpi": ["openmpi"],
+                        "blas": ["openblas"],
+                        "lapack": ["openblas"],
+                        "scalapack": ["netlib-scalapack"],
+                        "fftw-api": ["fftw"],
                     },
                     "permissions": {"write": "group"},
                 },
+                # The qc-gh200 nodes run Ubuntu 24.04 since the 2026-10
+                # maintenance (Rocky 9 before); the /usr externals below are
+                # the Ubuntu packages found on them.
                 "autoconf": {
                     "externals": [
                         {
-                            "spec": "autoconf@2.69",
+                            "spec": "autoconf@2.71",
                             "prefix": "/usr",
                         }
                     ]
@@ -103,7 +131,7 @@ class RikenGh200(System):
                 "automake": {
                     "externals": [
                         {
-                            "spec": "automake@1.16.2",
+                            "spec": "automake@1.16.5",
                             "prefix": "/usr",
                         }
                     ]
@@ -111,7 +139,7 @@ class RikenGh200(System):
                 "binutils": {
                     "externals": [
                         {
-                            "spec": "binutils@2.35.2~gold~headers",
+                            "spec": "binutils@2.42~gold~headers",
                             "prefix": "/usr",
                         }
                     ]
@@ -119,7 +147,7 @@ class RikenGh200(System):
                 "bzip2": {
                     "externals": [
                         {
-                            "spec": "bzip2@1.0.6 arch=linux-rhel8-a64fx",
+                            "spec": "bzip2@1.0.8",
                             "prefix": "/usr",
                         }
                     ]
@@ -127,7 +155,7 @@ class RikenGh200(System):
                 "bison": {
                     "externals": [
                         {
-                            "spec": "bison@3.7.4",
+                            "spec": "bison@3.8.2",
                             "prefix": "/usr",
                         }
                     ]
@@ -135,7 +163,7 @@ class RikenGh200(System):
                 "cmake": {
                     "externals": [
                         {
-                            "spec": "cmake@3.26.5",
+                            "spec": "cmake@3.28.3",
                             "prefix": "/usr",
                         }
                     ]
@@ -143,7 +171,7 @@ class RikenGh200(System):
                 "coreutils": {
                     "externals": [
                         {
-                            "spec": "coreutils@8.32",
+                            "spec": "coreutils@9.4",
                             "prefix": "/usr",
                         }
                     ]
@@ -151,7 +179,7 @@ class RikenGh200(System):
                 "curl": {
                     "externals": [
                         {
-                            "spec": "curl@7.76.1+gssapi+ldap+nghttp2",
+                            "spec": "curl@8.5.0+gssapi+ldap+nghttp2",
                             "prefix": "/usr",
                         }
                     ]
@@ -159,7 +187,7 @@ class RikenGh200(System):
                 "diffutils": {
                     "externals": [
                         {
-                            "spec": "diffutils@3.7",
+                            "spec": "diffutils@3.10",
                             "prefix": "/usr",
                         }
                     ]
@@ -167,7 +195,7 @@ class RikenGh200(System):
                 "findutils": {
                     "externals": [
                         {
-                            "spec": "findutils@4.8.0",
+                            "spec": "findutils@4.9.0",
                             "prefix": "/usr",
                         }
                     ]
@@ -183,7 +211,7 @@ class RikenGh200(System):
                 "gawk": {
                     "externals": [
                         {
-                            "spec": "gawk@5.1.0",
+                            "spec": "gawk@5.2.1",
                             "prefix": "/usr",
                         }
                     ]
@@ -199,7 +227,7 @@ class RikenGh200(System):
                 "git": {
                     "externals": [
                         {
-                            "spec": "git@2.47.3~tcltk",
+                            "spec": "git@2.43.0~tcltk",
                             "prefix": "/usr",
                         }
                     ]
@@ -215,16 +243,16 @@ class RikenGh200(System):
                 "groff": {
                     "externals": [
                         {
-                            "spec": "groff@1.22.4",
+                            "spec": "groff@1.23.0",
                             "prefix": "/usr",
                         }
                     ]
                 },
-                "libtool": {
+                "libevent": {
                     "externals": [
                         {
-                            "spec": "libtool@2.4.6",
-                            "prefix": "/usr",
+                            "spec": "libevent@2.1.12",
+                            "prefix": "/lvs0/rccs-nghpcadu/share/spack/opt/spack/neoverse_v2/libevent-2.1.12",
                         }
                     ]
                 },
@@ -232,7 +260,15 @@ class RikenGh200(System):
                     "externals": [
                         {
                             "spec": "libiconv@1.18",
-                            "prefix": "/usr",
+                            "prefix": "/lvs0/rccs-nghpcadu/share/spack/opt/spack/neoverse_v2/libiconv-1.18",
+                        }
+                    ]
+                },
+                "libtool": {
+                    "externals": [
+                        {
+                            "spec": "libtool@2.4.7",
+                            "prefix": "/lvs0/rccs-nghpcadu/share/spack/opt/spack/neoverse_v2/libtool-2.4.7",
                         }
                     ]
                 },
@@ -247,7 +283,7 @@ class RikenGh200(System):
                 "openssh": {
                     "externals": [
                         {
-                            "spec": "openssh@8.7p1",
+                            "spec": "openssh@9.6p1",
                             "prefix": "/usr",
                         }
                     ]
@@ -255,7 +291,7 @@ class RikenGh200(System):
                 "openssl": {
                     "externals": [
                         {
-                            "spec": "openssl@3.2.2",
+                            "spec": "openssl@3.0.13",
                             "prefix": "/usr",
                         }
                     ]
@@ -263,23 +299,15 @@ class RikenGh200(System):
                 "perl": {
                     "externals": [
                         {
-                            "spec": "perl@5.32.1~cpanm+opcode+open+shared+threads",
+                            "spec": "perl@5.38.2~cpanm+opcode+open+shared+threads",
                             "prefix": "/usr",
                         }
                     ]
                 },
-                "pigz": {
-                    "externals": [
-                        {
-                            "spec": "pigz@2.8",
-                            "prefix": "/usr",
-                        }
-                    ],
-                },
                 "pkgconf": {
                     "externals": [
                         {
-                            "spec": "pkgconf@1.7.3",
+                            "spec": "pkgconf@1.8.1",
                             "prefix": "/usr",
                         }
                     ]
@@ -287,7 +315,7 @@ class RikenGh200(System):
                 "python": {
                     "externals": [
                         {
-                            "spec": "python@3.9.21+bz2+crypt+ctypes+dbm+lzma+pyexpat+pythoncmd+readline+sqlite3+ssl+tix+tkinter+uuid+zlib",
+                            "spec": "python@3.12.3",
                             "prefix": "/usr",
                         }
                     ]
@@ -295,15 +323,7 @@ class RikenGh200(System):
                 "sed": {
                     "externals": [
                         {
-                            "spec": "sed@4.8",
-                            "prefix": "/usr",
-                        }
-                    ]
-                },
-                "singularity": {
-                    "externals": [
-                        {
-                            "spec": "singularity@4.3.3",
+                            "spec": "sed@4.9",
                             "prefix": "/usr",
                         }
                     ]
@@ -319,7 +339,7 @@ class RikenGh200(System):
                 "tar": {
                     "externals": [
                         {
-                            "spec": "tar@1.34",
+                            "spec": "tar@1.35",
                             "prefix": "/usr",
                         }
                     ]
@@ -327,7 +347,7 @@ class RikenGh200(System):
                 "xz": {
                     "externals": [
                         {
-                            "spec": "xz@5.2.5",
+                            "spec": "xz@5.4.5",
                             "prefix": "/usr",
                         }
                     ]
@@ -335,7 +355,7 @@ class RikenGh200(System):
                 "zlib": {
                     "externals": [
                         {
-                            "spec": "zlib@1.2.11",
+                            "spec": "zlib@1.3",
                             "prefix": "/usr",
                         }
                     ]
@@ -343,7 +363,7 @@ class RikenGh200(System):
                 "zstd": {
                     "externals": [
                         {
-                            "spec": "zstd@5.2.5",
+                            "spec": "zstd@1.5.5",
                             "prefix": "/usr",
                         }
                     ]
@@ -355,19 +375,40 @@ class RikenGh200(System):
                 "openmpi": {
                     "externals": [
                         {
-                            "spec": "openmpi@4.1.7",
-                            "prefix": "/usr/mpi/gcc/openmpi-4.1.7rc1",
-                            "extra_attributes": {
-                                "ldflags": "-L/usr/mpi/gcc/openmpi-4.1.7rc1/lib64 -lmpi"
-                            },
+                            "spec": "openmpi@4.1.8",
+                            "prefix": "/lvs0/rccs-nghpcadu/share/spack/opt/spack/neoverse_v2/openmpi-4.1.8",
                         },
                     ],
                 },
+            }
+        else:
+            ompi_version = "4.1.7a1"
+            if str(self.nvhpc_version) == "25.9" or str(self.nvhpc_version) == "26.3":
+                ompi_version = "4.1.9a1"
+            if str(self.nvhpc_version) == "26.5" or str(self.nvhpc_version) == "26.9":
+                ompi_version = "5.0.10rc2"
+            selections["packages"] |= {
+                "openmpi": {
+                    "externals": [
+                        {
+                            "spec": f"openmpi@{ompi_version}+cuda cuda_arch=90",
+                            "prefix": f"/opt/nvidia/hpc_sdk/Linux_aarch64/{self.nvhpc_version}/comm_libs/{self.cuda_version}/hpcx/latest/ompi",
+                        },
+                    ],
+                    "buildable": False,
+                },
+                "mpi": {"buildable": False},
             }
         if not self.spec.satisfies("compiler=cuda"):
             selections["packages"] |= self.cuda_config()["packages"]
 
         return selections
+
+    def hpcx_dir(self):
+        return (
+            f"/opt/nvidia/hpc_sdk/Linux_aarch64/{self.nvhpc_version}"
+            f"/comm_libs/{self.cuda_version}/hpcx/latest"
+        )
 
     def cuda_config(self):
         cuda_version = self.cuda_version
@@ -379,63 +420,9 @@ class RikenGh200(System):
                             {
                                 "spec": f"cuda@{cuda_version}",
                                 "prefix": f"/opt/nvidia/hpc_sdk/Linux_aarch64/{self.nvhpc_version}/cuda/{cuda_version}",
-                                "modules": [
-                                    "system/qc-gh200",
-                                    f"nvhpc/{self.nvhpc_version}",
-                                ],
                             }
                         ],
                         "buildable": False,
-                    },
-                    "curand": {
-                        "externals": [
-                            {
-                                "spec": f"curand@{cuda_version}",
-                                "prefix": f"/opt/nvidia/hpc_sdk/Linux_aarch64/{self.nvhpc_version}/math_libs/{cuda_version}",
-                            }
-                        ],
-                        "buildable": False,
-                    },
-                    "cusparse": {
-                        "externals": [
-                            {
-                                "spec": f"cusparse@{cuda_version}",
-                                "prefix": f"/opt/nvidia/hpc_sdk/Linux_aarch64/{self.nvhpc_version}/math_libs/{cuda_version}",
-                            }
-                        ],
-                        "buildable": False,
-                    },
-                    "cublas": {
-                        "externals": [
-                            {
-                                "spec": f"cublas@{cuda_version}",
-                                "prefix": f"/opt/nvidia/hpc_sdk/Linux_aarch64/{self.nvhpc_version}/math_libs/{cuda_version}",
-                            }
-                        ],
-                        "buildable": False,
-                    },
-                    "cusolver": {
-                        "externals": [
-                            {
-                                "spec": f"cusolver@{cuda_version}",
-                                "prefix": f"/opt/nvidia/hpc_sdk/Linux_aarch64/{self.nvhpc_version}/math_libs/{cuda_version}",
-                            }
-                        ],
-                        "buildable": False,
-                    },
-                    "cufft": {
-                        "externals": [
-                            {
-                                "spec": f"cufft@{cuda_version}",
-                                "prefix": f"/opt/nvidia/hpc_sdk/Linux_aarch64/{self.nvhpc_version}/math_libs/{cuda_version}",
-                            }
-                        ],
-                        "buildable": False,
-                    },
-                    "openmpi": {
-                        "buildable": True,
-                        "version": ["4.1.7"],
-                        "variants": "+cuda+cxx cuda_arch=90 fabrics=ucx schedulers=slurm",
                     },
                 }
             }
@@ -453,27 +440,58 @@ class RikenGh200(System):
         }
 
     def compute_compilers_section(self):
-        gcc_cfg = compiler_section_for(
-            "gcc",
-            [
-                compiler_def(
-                    "gcc@11.5.0 languages:=c,c++,fortran",
-                    "/usr/",
-                    {"c": "gcc", "cxx": "g++", "fortran": "gfortran"},
-                )
-            ],
-        )
-        if self.spec.satisfies("compiler=cuda"):
-            cuda_cfg = compiler_section_for(
-                "cuda",
+        if str(self.gcc_version) == "13.3.0":
+            gcc_cfg = compiler_section_for(
+                "gcc",
                 [
                     compiler_def(
-                        f"cuda@{self.cuda_version}",
-                        f"/usr/local/cuda-{self.cuda_version}",
-                        {"c": "nvcc", "cxx": "nvcc"},
+                        "gcc@13.3.0 languages:=c,c++,fortran",
+                        "/usr/",
+                        {"c": "gcc", "cxx": "g++", "fortran": "gfortran"},
                     )
                 ],
             )
+        else:
+            gcc_cfg = compiler_section_for(
+                "gcc",
+                [
+                    compiler_def(
+                        f"gcc@{self.gcc_version} languages:=c,c++,fortran",
+                        f"/lvs0/rccs-nghpcadu/share/spack/opt/spack/neoverse_v2/gcc-{self.gcc_version}",
+                        {"c": "gcc", "cxx": "g++", "fortran": "gfortran"},
+                    )
+                ],
+            )
+
+        if self.spec.satisfies("compiler=cuda"):
+            if str(self.cuda_version).split(".")[0] == "12":
+                if str(self.cuda_version) == "12.9":
+                    cuda_version = "12.9.1"
+                if str(self.cuda_version) == "12.6":
+                    cuda_version = "12.6.3"
+                if str(self.cuda_version) == "12.3":
+                    cuda_version = "12.3.2"
+                cuda_cfg = compiler_section_for(
+                    "cuda",
+                    [
+                        compiler_def(
+                            f"cuda@{cuda_version}",
+                            f"/lvs0/rccs-nghpcadu/share/spack/opt/spack/neoverse_v2/cuda-{cuda_version}",
+                            {"c": "nvcc", "cxx": "nvcc"},
+                        )
+                    ],
+                )
+            else:
+                cuda_cfg = compiler_section_for(
+                    "cuda",
+                    [
+                        compiler_def(
+                            f"cuda@{self.cuda_version}",
+                            f"/usr/local/cuda-{self.cuda_version}",
+                            {"c": "nvcc", "cxx": "nvcc"},
+                        )
+                    ],
+                )
             return merge_dicts(cuda_cfg, gcc_cfg)
         if self.spec.satisfies("compiler=nvhpc"):
             return compiler_section_for(
@@ -481,14 +499,24 @@ class RikenGh200(System):
                 [
                     compiler_def(
                         f"nvhpc@{self.nvhpc_version}",
-                        f"/opt/nvidia/hpc_sdk/Linux_aarch64/{self.nvhpc_version}/compilers",
-                        {"c": "nvc", "cxx": "nvc++", "fortran": "nvfortran"},
+                        # The SDK root, not .../compilers. spack's nvhpc
+                        # package appends Linux_<arch>/<version>/compilers
+                        # when locating libblas and liblapack, so a deeper
+                        # prefix resolves to a path that does not exist and
+                        # dependents receive an empty library list. The
+                        # compiler drivers are given as absolute paths,
+                        # since compiler_def joins bare names to the prefix.
+                        "/opt/nvidia/hpc_sdk",
+                        {
+                            lang: f"/opt/nvidia/hpc_sdk/Linux_aarch64/{self.nvhpc_version}/compilers/bin/{exe}"
+                            for lang, exe in (
+                                ("c", "nvc"),
+                                ("cxx", "nvc++"),
+                                ("fortran", "nvfortran"),
+                            )
+                        },
                         extra_rpaths=[
                             f"/opt/nvidia/hpc_sdk/Linux_aarch64/{self.nvhpc_version}/math_libs/lib64",
-                        ],
-                        modules=[
-                            "system/qc-gh200",
-                            f"nvhpc/{self.nvhpc_version}",
                         ],
                     )
                 ],
@@ -496,10 +524,17 @@ class RikenGh200(System):
         return gcc_cfg
 
     def system_specific_variables(self):
+        pre_exec = "export SLURM_MPI_TYPE=pmix"
+        if self.spec.satisfies("compiler=nvhpc"):
+            pre_exec += (
+                f"; source {self.hpcx_dir()}/hpcx-init.sh && hpcx_load"
+                "; export OMPI_MCA_pml=ucx"
+                "; export PMIX_MCA_psec=native"
+            )
         return {
             "cuda_arch": "90",
             "queue": "qc-gh200",
-            "pre_exec_cmds": "export SLURM_MPI_TYPE=pmix",
+            "pre_exec_cmds": pre_exec,
         }
 
     def compute_software_section(self):

@@ -46,6 +46,7 @@ def test_list():
             for experiment in ["nbody", "softmax", "wmma"]:
                 expected = f"hecbench.{experiment}+[cuda|rocm|mpi]"
                 assert expected in result_with_title.stdout
+            assert "hecbench.suite+[openmp|cuda|rocm]" in result_with_title.stdout
             assert "    hecbench\n" not in result_with_title.stdout
 
     # Check filtering
@@ -67,7 +68,9 @@ def test_list():
     assert "gpcnet" not in check_cuda.stdout
 
 
-def test_tags():
+def test_tags(monkeypatch):
+    # Application discovery must also work on hosts without this optional variable.
+    monkeypatch.delenv("HOSTNAME", raising=False)
     subprocess.run(
         [paths.benchpark_root / "bin/benchpark", "tags", "-a", "ad"],
         check=True,
